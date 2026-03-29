@@ -1,0 +1,17 @@
+runs/
+roms/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.state
+wandb/
+.env
+.claude/
+.venv/
+models/
+videos/
+logs/

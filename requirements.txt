@@ -1,0 +1,15 @@
+# Requires Python >=3.10, <3.13 (constrained by stable-retro)
+# Verified compatible with Python 3.12 on 2026-03-28
+
+stable-retro>=0.9.9,<1.0        # SNES emulation + Gymnasium API (requires Python <3.13)
+stable-baselines3[extra]>=2.7.0  # PPO, DQN, callbacks, VecEnv
+sb3-contrib>=2.7.0               # QR-DQN (distributional RL)
+gymnasium>=1.0.0                 # Environment standard API
+torch>=2.1.0                     # Neural network backend
+numpy>=1.26.0                    # Array operations
+opencv-python>=4.8.0             # Frame processing (crop, resize, grayscale)
+wandb>=0.16.0                    # Experiment tracking & visualization
+matplotlib>=3.8.0                # Heatmaps and comparison plots
+tensorboard>=2.15.0              # Fallback logging
+moviepy>=1.0.0                   # Video recording for VecVideoRecorder
+pytest>=7.0.0                    # Testing

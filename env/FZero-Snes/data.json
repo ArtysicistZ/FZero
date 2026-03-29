@@ -1,0 +1,532 @@
+{
+  "info": {
+    "player_x": {
+      "address": 162,
+      "type": "<u2"
+    },
+    "player_y": {
+      "address": 166,
+      "type": "<u2"
+    },
+    "energy": {
+      "address": 201,
+      "type": "<i2"
+    },
+    "lap": {
+      "address": 252,
+      "type": "|u1"
+    },
+    "race_timer_min": {
+      "address": 192,
+      "type": "|u1"
+    },
+    "race_timer_sec": {
+      "address": 193,
+      "type": "|u1"
+    },
+    "race_timer_csec": {
+      "address": 194,
+      "type": "|u1"
+    },
+    "checkpoint_total": {
+      "address": 173,
+      "type": "|u1"
+    },
+    "checkpoint_facing": {
+      "address": 197,
+      "type": "|u1"
+    },
+    "rank": {
+      "address": 210,
+      "type": "|u1"
+    },
+    "player_x_track": {
+      "address": 2928,
+      "type": "<u2"
+    },
+    "player_y_track": {
+      "address": 2960,
+      "type": "<u2"
+    },
+    "cp_x_0": {
+      "address": 4608,
+      "type": "<u2"
+    },
+    "cp_y_0": {
+      "address": 5120,
+      "type": "<u2"
+    },
+    "cp_x_1": {
+      "address": 4610,
+      "type": "<u2"
+    },
+    "cp_y_1": {
+      "address": 5122,
+      "type": "<u2"
+    },
+    "cp_x_2": {
+      "address": 4612,
+      "type": "<u2"
+    },
+    "cp_y_2": {
+      "address": 5124,
+      "type": "<u2"
+    },
+    "cp_x_3": {
+      "address": 4614,
+      "type": "<u2"
+    },
+    "cp_y_3": {
+      "address": 5126,
+      "type": "<u2"
+    },
+    "cp_x_4": {
+      "address": 4616,
+      "type": "<u2"
+    },
+    "cp_y_4": {
+      "address": 5128,
+      "type": "<u2"
+    },
+    "cp_x_5": {
+      "address": 4618,
+      "type": "<u2"
+    },
+    "cp_y_5": {
+      "address": 5130,
+      "type": "<u2"
+    },
+    "cp_x_6": {
+      "address": 4620,
+      "type": "<u2"
+    },
+    "cp_y_6": {
+      "address": 5132,
+      "type": "<u2"
+    },
+    "cp_x_7": {
+      "address": 4622,
+      "type": "<u2"
+    },
+    "cp_y_7": {
+      "address": 5134,
+      "type": "<u2"
+    },
+    "cp_x_8": {
+      "address": 4624,
+      "type": "<u2"
+    },
+    "cp_y_8": {
+      "address": 5136,
+      "type": "<u2"
+    },
+    "cp_x_9": {
+      "address": 4626,
+      "type": "<u2"
+    },
+    "cp_y_9": {
+      "address": 5138,
+      "type": "<u2"
+    },
+    "cp_x_10": {
+      "address": 4628,
+      "type": "<u2"
+    },
+    "cp_y_10": {
+      "address": 5140,
+      "type": "<u2"
+    },
+    "cp_x_11": {
+      "address": 4630,
+      "type": "<u2"
+    },
+    "cp_y_11": {
+      "address": 5142,
+      "type": "<u2"
+    },
+    "cp_x_12": {
+      "address": 4632,
+      "type": "<u2"
+    },
+    "cp_y_12": {
+      "address": 5144,
+      "type": "<u2"
+    },
+    "cp_x_13": {
+      "address": 4634,
+      "type": "<u2"
+    },
+    "cp_y_13": {
+      "address": 5146,
+      "type": "<u2"
+    },
+    "cp_x_14": {
+      "address": 4636,
+      "type": "<u2"
+    },
+    "cp_y_14": {
+      "address": 5148,
+      "type": "<u2"
+    },
+    "cp_x_15": {
+      "address": 4638,
+      "type": "<u2"
+    },
+    "cp_y_15": {
+      "address": 5150,
+      "type": "<u2"
+    },
+    "cp_x_16": {
+      "address": 4640,
+      "type": "<u2"
+    },
+    "cp_y_16": {
+      "address": 5152,
+      "type": "<u2"
+    },
+    "cp_x_17": {
+      "address": 4642,
+      "type": "<u2"
+    },
+    "cp_y_17": {
+      "address": 5154,
+      "type": "<u2"
+    },
+    "cp_x_18": {
+      "address": 4644,
+      "type": "<u2"
+    },
+    "cp_y_18": {
+      "address": 5156,
+      "type": "<u2"
+    },
+    "cp_x_19": {
+      "address": 4646,
+      "type": "<u2"
+    },
+    "cp_y_19": {
+      "address": 5158,
+      "type": "<u2"
+    },
+    "cp_x_20": {
+      "address": 4648,
+      "type": "<u2"
+    },
+    "cp_y_20": {
+      "address": 5160,
+      "type": "<u2"
+    },
+    "cp_x_21": {
+      "address": 4650,
+      "type": "<u2"
+    },
+    "cp_y_21": {
+      "address": 5162,
+      "type": "<u2"
+    },
+    "cp_x_22": {
+      "address": 4652,
+      "type": "<u2"
+    },
+    "cp_y_22": {
+      "address": 5164,
+      "type": "<u2"
+    },
+    "cp_x_23": {
+      "address": 4654,
+      "type": "<u2"
+    },
+    "cp_y_23": {
+      "address": 5166,
+      "type": "<u2"
+    },
+    "cp_x_24": {
+      "address": 4656,
+      "type": "<u2"
+    },
+    "cp_y_24": {
+      "address": 5168,
+      "type": "<u2"
+    },
+    "cp_x_25": {
+      "address": 4658,
+      "type": "<u2"
+    },
+    "cp_y_25": {
+      "address": 5170,
+      "type": "<u2"
+    },
+    "cp_x_26": {
+      "address": 4660,
+      "type": "<u2"
+    },
+    "cp_y_26": {
+      "address": 5172,
+      "type": "<u2"
+    },
+    "cp_x_27": {
+      "address": 4662,
+      "type": "<u2"
+    },
+    "cp_y_27": {
+      "address": 5174,
+      "type": "<u2"
+    },
+    "cp_x_28": {
+      "address": 4664,
+      "type": "<u2"
+    },
+    "cp_y_28": {
+      "address": 5176,
+      "type": "<u2"
+    },
+    "cp_x_29": {
+      "address": 4666,
+      "type": "<u2"
+    },
+    "cp_y_29": {
+      "address": 5178,
+      "type": "<u2"
+    },
+    "cp_x_30": {
+      "address": 4668,
+      "type": "<u2"
+    },
+    "cp_y_30": {
+      "address": 5180,
+      "type": "<u2"
+    },
+    "cp_x_31": {
+      "address": 4670,
+      "type": "<u2"
+    },
+    "cp_y_31": {
+      "address": 5182,
+      "type": "<u2"
+    },
+    "cp_x_32": {
+      "address": 4672,
+      "type": "<u2"
+    },
+    "cp_y_32": {
+      "address": 5184,
+      "type": "<u2"
+    },
+    "cp_x_33": {
+      "address": 4674,
+      "type": "<u2"
+    },
+    "cp_y_33": {
+      "address": 5186,
+      "type": "<u2"
+    },
+    "cp_x_34": {
+      "address": 4676,
+      "type": "<u2"
+    },
+    "cp_y_34": {
+      "address": 5188,
+      "type": "<u2"
+    },
+    "cp_x_35": {
+      "address": 4678,
+      "type": "<u2"
+    },
+    "cp_y_35": {
+      "address": 5190,
+      "type": "<u2"
+    },
+    "cp_x_36": {
+      "address": 4680,
+      "type": "<u2"
+    },
+    "cp_y_36": {
+      "address": 5192,
+      "type": "<u2"
+    },
+    "cp_x_37": {
+      "address": 4682,
+      "type": "<u2"
+    },
+    "cp_y_37": {
+      "address": 5194,
+      "type": "<u2"
+    },
+    "cp_x_38": {
+      "address": 4684,
+      "type": "<u2"
+    },
+    "cp_y_38": {
+      "address": 5196,
+      "type": "<u2"
+    },
+    "cp_x_39": {
+      "address": 4686,
+      "type": "<u2"
+    },
+    "cp_y_39": {
+      "address": 5198,
+      "type": "<u2"
+    },
+    "cp_x_40": {
+      "address": 4688,
+      "type": "<u2"
+    },
+    "cp_y_40": {
+      "address": 5200,
+      "type": "<u2"
+    },
+    "cp_x_41": {
+      "address": 4690,
+      "type": "<u2"
+    },
+    "cp_y_41": {
+      "address": 5202,
+      "type": "<u2"
+    },
+    "cp_x_42": {
+      "address": 4692,
+      "type": "<u2"
+    },
+    "cp_y_42": {
+      "address": 5204,
+      "type": "<u2"
+    },
+    "cp_x_43": {
+      "address": 4694,
+      "type": "<u2"
+    },
+    "cp_y_43": {
+      "address": 5206,
+      "type": "<u2"
+    },
+    "cp_x_44": {
+      "address": 4696,
+      "type": "<u2"
+    },
+    "cp_y_44": {
+      "address": 5208,
+      "type": "<u2"
+    },
+    "cp_x_45": {
+      "address": 4698,
+      "type": "<u2"
+    },
+    "cp_y_45": {
+      "address": 5210,
+      "type": "<u2"
+    },
+    "cp_x_46": {
+      "address": 4700,
+      "type": "<u2"
+    },
+    "cp_y_46": {
+      "address": 5212,
+      "type": "<u2"
+    },
+    "cp_x_47": {
+      "address": 4702,
+      "type": "<u2"
+    },
+    "cp_y_47": {
+      "address": 5214,
+      "type": "<u2"
+    },
+    "cp_x_48": {
+      "address": 4704,
+      "type": "<u2"
+    },
+    "cp_y_48": {
+      "address": 5216,
+      "type": "<u2"
+    },
+    "cp_x_49": {
+      "address": 4706,
+      "type": "<u2"
+    },
+    "cp_y_49": {
+      "address": 5218,
+      "type": "<u2"
+    },
+    "cp_x_50": {
+      "address": 4708,
+      "type": "<u2"
+    },
+    "cp_y_50": {
+      "address": 5220,
+      "type": "<u2"
+    },
+    "cp_x_51": {
+      "address": 4710,
+      "type": "<u2"
+    },
+    "cp_y_51": {
+      "address": 5222,
+      "type": "<u2"
+    },
+    "cp_x_52": {
+      "address": 4712,
+      "type": "<u2"
+    },
+    "cp_y_52": {
+      "address": 5224,
+      "type": "<u2"
+    },
+    "cp_x_53": {
+      "address": 4714,
+      "type": "<u2"
+    },
+    "cp_y_53": {
+      "address": 5226,
+      "type": "<u2"
+    },
+    "cp_x_54": {
+      "address": 4716,
+      "type": "<u2"
+    },
+    "cp_y_54": {
+      "address": 5228,
+      "type": "<u2"
+    },
+    "cp_x_55": {
+      "address": 4718,
+      "type": "<u2"
+    },
+    "cp_y_55": {
+      "address": 5230,
+      "type": "<u2"
+    },
+    "cp_x_56": {
+      "address": 4720,
+      "type": "<u2"
+    },
+    "cp_y_56": {
+      "address": 5232,
+      "type": "<u2"
+    },
+    "cp_x_57": {
+      "address": 4722,
+      "type": "<u2"
+    },
+    "cp_y_57": {
+      "address": 5234,
+      "type": "<u2"
+    },
+    "cp_x_58": {
+      "address": 4724,
+      "type": "<u2"
+    },
+    "cp_y_58": {
+      "address": 5236,
+      "type": "<u2"
+    },
+    "cp_x_59": {
+      "address": 4726,
+      "type": "<u2"
+    },
+    "cp_y_59": {
+      "address": 5238,
+      "type": "<u2"
+    }
+  }
+}
