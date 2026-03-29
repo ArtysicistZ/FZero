@@ -101,11 +101,14 @@ def train(algo: str = "ppo", config: TrainingConfig = None):
     from training.callbacks import RewardLoggingCallback, BestLapCallback
 
     # Create vectorized environment
+    # DQN and QR-DQN require Discrete action space (flat_actions=True)
+    flat_actions = algo in ("dqn", "qrdqn")
     env = make_fzero_env(
         n_envs=config.env.n_envs,
         render_mode="rgb_array",
         env_config=config.env,
         reward_config=config.reward,
+        flat_actions=flat_actions,
     )
 
     # Determine total timesteps for this algorithm

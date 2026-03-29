@@ -79,18 +79,20 @@ class FloatFeatureBuilder:
         self._prev_x = 0.0
         self._prev_y = 0.0
 
-    def build(self, info: dict, checkpoints: np.ndarray, action: int = 0) -> np.ndarray:
+    def build(self, info: dict, checkpoints: np.ndarray, action: np.ndarray = None) -> np.ndarray:
         """
         Build the float feature vector from RAM info and track data.
 
         Args:
             info: dict of RAM variables from stable-retro step
             checkpoints: (N, 2) array of track checkpoint (x, y) positions
-            action: the action just taken (for history)
+            action: MultiDiscrete action array (5,) or None
 
         Returns:
             (dim,) float32 array
         """
+        if action is None:
+            action = np.zeros(5, dtype=np.int64)
         x = float(info.get("player_x", 0))
         y = float(info.get("player_y", 0))
         energy = float(info.get("energy", 0))

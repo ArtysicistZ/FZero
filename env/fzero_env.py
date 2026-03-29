@@ -14,7 +14,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from env.actions import multi_discrete_to_buttons, multi_to_flat, ACTION_DIMS
+from env.actions import multi_discrete_to_buttons, multi_to_flat, flat_to_multi, ACTION_DIMS, N_ACTIONS_FLAT
 from env.observations import FrameProcessor, FloatFeatureBuilder
 from env.rewards import RewardCalculator
 from training.config import EnvConfig, RewardConfig, INTEGRATION_DIR
@@ -179,3 +179,17 @@ class FZeroEnv(gym.Env):
     @property
     def last_reward_components(self) -> dict:
         return self._last_reward_components
+
+
+class FlatDiscreteWrapper(gym.ActionWrapper):
+    """Wraps MultiDiscrete([3,3,2,2,2]) as Discrete(72) for DQN/QR-DQN.
+
+    Converts flat action index to MultiDiscrete array before passing to env.
+    """
+
+    def __init__(self, env):
+        super().__init__(env)
+        self.action_space = spaces.Discrete(N_ACTIONS_FLAT)
+
+    def action(self, action):
+        return flat_to_multi(int(action))

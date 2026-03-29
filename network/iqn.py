@@ -36,8 +36,15 @@ class IQNNetwork(nn.Module):
       → Q_i = V + A_i - mean(A_i) for each dimension
     """
 
-    def __init__(self, float_input_dim: int, net_cfg: NetworkConfig = None,
-                 iqn_cfg: IQNConfig = None):
+    def __init__(self, float_input_dim: int, screen_shape: tuple,
+                 net_cfg: NetworkConfig = None, iqn_cfg: IQNConfig = None):
+        """
+        Args:
+            float_input_dim: dimension of the float feature vector
+            screen_shape: (frame_stack, height, width) from observation space
+            net_cfg: network architecture config
+            iqn_cfg: IQN algorithm config
+        """
         super().__init__()
         net_cfg = net_cfg or NetworkConfig()
         iqn_cfg = iqn_cfg or IQNConfig()
@@ -47,9 +54,11 @@ class IQNNetwork(nn.Module):
         leaky_slope = net_cfg.leaky_relu_slope
         activation_gain = nn.init.calculate_gain("leaky_relu", leaky_slope)
 
+        frame_stack, screen_h, screen_w = screen_shape
+
         # CNN branch
         cnn_layers = []
-        in_ch = 4  # frame_stack
+        in_ch = frame_stack
         for out_ch, k, s in zip(net_cfg.cnn_channels, net_cfg.cnn_kernels, net_cfg.cnn_strides):
             cnn_layers.append(nn.Conv2d(in_ch, out_ch, k, s))
             cnn_layers.append(nn.LeakyReLU(leaky_slope, inplace=True))
@@ -57,9 +66,9 @@ class IQNNetwork(nn.Module):
         cnn_layers.append(nn.Flatten())
         self.cnn = nn.Sequential(*cnn_layers)
 
-        # Compute CNN output dim
+        # Compute CNN output dim from actual screen shape
         with torch.no_grad():
-            dummy = torch.zeros(1, 4, 120, 160)
+            dummy = torch.zeros(1, frame_stack, screen_h, screen_w)
             cnn_out_dim = self.cnn(dummy).shape[1]
 
         # Float branch
@@ -134,8 +143,8 @@ class IQNNetwork(nn.Module):
         batch_size = screen.shape[0]
         device = screen.device
 
-        # Feature extraction
-        cnn_out = self.cnn(screen)
+        # Feature extraction (normalize image from [0,1] to [-1,1] for zero-centered input)
+        cnn_out = self.cnn(screen * 2.0 - 1.0)
         float_out = self.float_mlp(float_inputs)
         features = torch.cat([cnn_out, float_out], dim=1)  # (B, dense_input_dim)
 
