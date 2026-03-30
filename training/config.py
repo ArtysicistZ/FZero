@@ -59,14 +59,7 @@ class RewardConfig:
     # Rewards faster completion with accelerating marginal returns
     # 162s: +50, 140s: +247, 118s: +593. 1s improvement: +5 to +19.
     time_bonus_reference: float = 180.0    # reference "slow" time (seconds)
-    time_bonus_scale: float = 5000.0       # quadratic scale factor
-
-    # Potential-based reward shaping (PBRS) — dense cornering signal
-    # phi(s) = pbrs_scale * clamp(dist_to_checkpoint, pbrs_min_dist, pbrs_max_dist)
-    # Reward: gamma * phi(s') - phi(s). Preserves optimal policy (Andrew Ng 1999).
-    pbrs_scale: float = -0.1              # Linesight uses -0.1
-    pbrs_min_dist: float = 2.0            # clamp lower bound
-    pbrs_max_dist: float = 25.0           # clamp upper bound
+    time_bonus_scale: float = 5000.0       # quadratic bonus at race completion
 
     # Stuck penalty: applied when episode is terminated for no progress
     stuck_penalty: float = 1.0
@@ -104,16 +97,18 @@ class NetworkConfig:
 # ============================================================
 @dataclass
 class PPOConfig:
-    learning_rate: float = 3e-4
+    # LR decays linearly from lr_start to lr_end over training
+    lr_start: float = 1.5e-4           # fine-tuning LR (targets KL ~0.015)
+    lr_end: float = 1e-5              # Linesight-style end LR
     n_steps: int = 512
     # batch_size should scale with n_envs: ~n_envs × n_steps / 20
     # With 80 envs: 2048 → 80 gradient steps per rollout.
     batch_size: int = 2048
     n_epochs: int = 4
-    gamma: float = 0.995             # horizon ~200 steps = 10 sec (sharper speed signal)
+    gamma: float = 0.999             # long horizon for racing
     gae_lambda: float = 0.95
     clip_range: float = 0.2
-    ent_coef: float = 0.01
+    ent_coef: float = 0.02           # increased for shoulder lean exploration
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
     total_timesteps: int = 50_000_000   # ~10h at 1400 fps with 160 envs

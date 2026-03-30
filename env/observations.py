@@ -79,7 +79,9 @@ class FloatFeatureBuilder:
         self._prev_x = 0.0
         self._prev_y = 0.0
 
-    def build(self, info: dict, checkpoints: np.ndarray, action: np.ndarray = None) -> np.ndarray:
+    def build(self, info: dict, checkpoints: np.ndarray, action: np.ndarray = None,
+              track_dist: float = 0.0, total_track_length: float = 1.0,
+              nearest_cp_idx: int = 0) -> np.ndarray:
         """
         Build the float feature vector from RAM info and track data.
 
@@ -87,6 +89,9 @@ class FloatFeatureBuilder:
             info: dict of RAM variables from stable-retro step
             checkpoints: (N, 2) array of track checkpoint (x, y) positions
             action: MultiDiscrete action array (5,) or None
+            track_dist: current distance along track centerline (from RewardCalculator)
+            total_track_length: total track length for one lap (from RewardCalculator)
+            nearest_cp_idx: index of nearest checkpoint (from RewardCalculator)
 
         Returns:
             (dim,) float32 array
@@ -96,9 +101,10 @@ class FloatFeatureBuilder:
         x = float(info.get("player_x", 0))
         y = float(info.get("player_y", 0))
         energy = float(info.get("energy", 0))
-        lap = float(info.get("lap", 1))
-        cp_total = float(info.get("checkpoint_total", 1))
-        cp_facing = float(info.get("checkpoint_facing", 0))
+
+        # Compute lap from track progress (RAM lap counter is broken)
+        single_lap = total_track_length if total_track_length > 0 else 1.0
+        estimated_lap = track_dist / single_lap if single_lap > 0 else 0.0
 
         # Derive speed from position delta
         dx = x - self._prev_x
@@ -107,17 +113,17 @@ class FloatFeatureBuilder:
         self._prev_x = x
         self._prev_y = y
 
-        # Core state (5 dims) — lap is 0-indexed (0=first lap)
+        # Core state (5 dims)
         core = np.array([
             speed / MAX_SPEED,
             energy / MAX_ENERGY,
-            lap / 4.0,                       # normalize: 0..4 -> 0..1
-            1.0 if lap >= 1 else 0.0,        # boost available from lap index 1
-            cp_facing / max(cp_total, 1.0),
+            min(estimated_lap, 5.0) / 5.0,    # normalized lap progress [0, 1]
+            1.0 if estimated_lap >= 1.0 else 0.0,  # boost available after first lap
+            (track_dist % single_lap) / single_lap if single_lap > 0 else 0.0,  # position within current lap [0, 1]
         ], dtype=np.float32)
 
         # Track preview: next N checkpoints relative to player (N * 3 dims)
-        preview = self._build_track_preview(x, y, cp_facing, checkpoints)
+        preview = self._build_track_preview(x, y, nearest_cp_idx, checkpoints)
 
         # Action history (n_history * action_encoding_dim dims)
         self._action_history.append(action)
@@ -128,7 +134,7 @@ class FloatFeatureBuilder:
         return np.concatenate([core, preview, history]).astype(np.float32)
 
     def _build_track_preview(
-        self, player_x: float, player_y: float, cp_idx: float,
+        self, player_x: float, player_y: float, nearest_cp_idx: int,
         checkpoints: np.ndarray,
     ) -> np.ndarray:
         """
@@ -139,7 +145,7 @@ class FloatFeatureBuilder:
             return np.zeros(self.n_preview * 3, dtype=np.float32)
 
         n_cp = len(checkpoints)
-        start_idx = int(cp_idx) % n_cp
+        start_idx = nearest_cp_idx % n_cp
         preview = np.zeros(self.n_preview * 3, dtype=np.float32)
 
         for i in range(self.n_preview):

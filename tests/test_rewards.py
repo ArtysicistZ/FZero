@@ -41,7 +41,6 @@ class TestRewardCalculator:
         assert not np.isnan(reward)
         assert "progress" in components
         assert "time" in components
-        assert "pbrs" in components
 
     def test_first_step_progress_is_zero(self, calc):
         calc.reset()
@@ -98,13 +97,13 @@ class TestRewardCalculator:
             )
         assert stuck is False
 
-    def test_pbrs_present_in_components(self, calc):
+    def test_no_pbrs_in_components(self, calc):
         calc.reset()
         calc.compute(_make_info(player_x_track=1500, player_y_track=0))
         _, components, _ = calc.compute(
             _make_info(player_x_track=1600, player_y_track=0)
         )
-        assert "pbrs" in components
+        assert "pbrs" not in components
 
     def test_time_bonus_positive_for_fast_race(self, calc):
         bonus = calc.compute_time_bonus(120.0)

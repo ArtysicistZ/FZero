@@ -36,8 +36,11 @@ def draw_overlay(frame: np.ndarray, info: dict) -> np.ndarray:
     total_reward = sum(components.values()) if components else 0.0
 
     timer_min = info.get("race_timer_min", 0)
-    timer_sec = info.get("race_timer_sec", 0)
-    timer_csec = info.get("race_timer_csec", 0)
+    # BCD decode timer fields
+    _raw_sec = info.get("race_timer_sec", 0)
+    _raw_csec = info.get("race_timer_csec", 0)
+    timer_sec = ((_raw_sec >> 4) & 0xF) * 10 + (_raw_sec & 0xF)
+    timer_csec = ((_raw_csec >> 4) & 0xF) * 10 + (_raw_csec & 0xF)
 
     lines = [
         f"NRG: {energy:4d}  LAP: {lap}/5",

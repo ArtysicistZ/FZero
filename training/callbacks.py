@@ -17,12 +17,18 @@ class RewardLoggingCallback(BaseCallback):
     def __init__(self, verbose: int = 0):
         super().__init__(verbose)
         self._episode_reward_sums = {}  # {env_idx: {key: sum}}
+        self._episode_norm_reward_sums = {}  # {env_idx: float}
 
     def _on_step(self) -> bool:
+        # self.locals["rewards"] contains the NORMALIZED rewards PPO trains on
+        norm_rewards = self.locals.get("rewards", [])
+
         for i, info in enumerate(self.locals.get("infos", [])):
             if i not in self._episode_reward_sums:
                 self._episode_reward_sums[i] = {}
+                self._episode_norm_reward_sums[i] = 0.0
 
+            # Accumulate raw reward components
             components = info.get("reward_components", {})
             for key, val in components.items():
                 full_key = f"reward/{key}"
@@ -34,12 +40,20 @@ class RewardLoggingCallback(BaseCallback):
             if "time_penalty_value" in info:
                 self._episode_reward_sums[i]["reward/time_penalty_value"] = info["time_penalty_value"]
 
-            # Check if episode ended (SB3 wraps with Monitor, sets "episode" key)
+            # Accumulate normalized reward (what PPO actually trains on)
+            if i < len(norm_rewards):
+                self._episode_norm_reward_sums[i] += float(norm_rewards[i])
+
+            # Check if episode ended
             if "episode" in info:
+                # Log raw components
                 for key, val in self._episode_reward_sums[i].items():
                     self.logger.record(key, val)
-                # SB3 logger handles aggregation; W&B syncs via sync_tensorboard
+                # Log normalized episode return (what PPO actually sees)
+                self.logger.record("reward/norm_episode_return",
+                                   self._episode_norm_reward_sums[i])
                 self._episode_reward_sums[i] = {}
+                self._episode_norm_reward_sums[i] = 0.0
 
         return True
 
@@ -57,14 +71,9 @@ class BestLapCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         for info in self.locals.get("infos", []):
-            # Check if race was completed (lap is 0-indexed: >= 5 means finished)
-            lap = info.get("lap", 0)
-            if lap >= 5:
-                timer_min = info.get("race_timer_min", 0)
-                timer_sec = info.get("race_timer_sec", 0)
-                timer_csec = info.get("race_timer_csec", 0)
-                race_time = timer_min * 60.0 + timer_sec + timer_csec / 100.0
-
+            # race_time is set by fzero_env when race finishes (already BCD-decoded)
+            race_time = info.get("race_time", None)
+            if race_time is not None:
                 if race_time < self._best_race_time:
                     self._best_race_time = race_time
                     save_path = os.path.join(self._save_dir, "best_model")

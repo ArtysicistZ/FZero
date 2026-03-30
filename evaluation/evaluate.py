@@ -60,10 +60,12 @@ def evaluate(model_path: str, algo: str = "ppo", n_episodes: int = 10,
             if done:
                 info = infos[0]
                 lap = info.get("lap", 1)
-                timer_min = info.get("race_timer_min", 0)
-                timer_sec = info.get("race_timer_sec", 0)
-                timer_csec = info.get("race_timer_csec", 0)
-                race_time = timer_min * 60.0 + timer_sec + timer_csec / 100.0
+                # Use BCD-decoded race_time from fzero_env if available
+                race_time = info.get("race_time", None)
+                if race_time is None:
+                    # Fallback: BCD decode here
+                    def _bcd(v): return ((v >> 4) & 0xF) * 10 + (v & 0xF)
+                    race_time = info.get("race_timer_min", 0) * 60.0 + _bcd(info.get("race_timer_sec", 0)) + _bcd(info.get("race_timer_csec", 0)) / 100.0
 
                 results["race_times"].append(race_time)
                 results["total_rewards"].append(total_reward)

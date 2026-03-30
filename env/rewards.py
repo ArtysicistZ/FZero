@@ -24,7 +24,7 @@ class RewardCalculator:
         self._stuck_timeout = cfg.stuck_timeout_steps
         self._steps_without_progress = 0
         self._prev_track_dist = None
-        self._prev_potential = None
+        self._cumulative_dist = 0.0  # total distance covered (across laps)
         self._checkpoints = None   # (N, 2) array, loaded on first compute
         self._cum_dist = None      # (N,) cumulative distance along track
         self._total_length = 0.0
@@ -33,7 +33,7 @@ class RewardCalculator:
         """Reset internal state for a new episode."""
         self._steps_without_progress = 0
         self._prev_track_dist = None
-        self._prev_potential = None
+        self._cumulative_dist = 0.0
 
     def _load_checkpoints(self, info: dict):
         """Load checkpoint coordinates from RAM info on first call."""
@@ -90,26 +90,6 @@ class RewardCalculator:
 
         return best_track_dist
 
-    def _get_nearest_checkpoint_dist(self, px: float, py: float) -> float:
-        """Get distance to the nearest checkpoint ahead on the track."""
-        if self._checkpoints is None or len(self._checkpoints) < 2:
-            return 0.0
-
-        # Find the closest checkpoint
-        dists = np.sqrt(np.sum((self._checkpoints - np.array([px, py])) ** 2, axis=1))
-        nearest_idx = np.argmin(dists)
-
-        # Use distance to the NEXT checkpoint (the one ahead)
-        next_idx = (nearest_idx + 1) % len(self._checkpoints)
-        cp = self._checkpoints[next_idx]
-        return math.sqrt((px - cp[0]) ** 2 + (py - cp[1]) ** 2)
-
-    def _get_potential(self, px: float, py: float) -> float:
-        """PBRS potential: negative distance to next checkpoint, clamped."""
-        dist = self._get_nearest_checkpoint_dist(px, py)
-        clamped = max(self.cfg.pbrs_min_dist, min(self.cfg.pbrs_max_dist, dist))
-        return self.cfg.pbrs_scale * clamped
-
     def compute(self, info: dict, action: int = 0) -> tuple[float, dict, bool]:
         """
         Compute reward.
@@ -139,21 +119,13 @@ class RewardCalculator:
 
         components["progress"] = delta * self.cfg.progress_scale
 
+        # Accumulate total distance (across laps)
+        self._cumulative_dist += max(0.0, delta)
+
         # 2. FIXED TIME PENALTY
         components["time"] = -self.cfg.time_penalty
 
-        # 3. PBRS — dense cornering signal
-        # reward = gamma * phi(s') - phi(s), preserves optimal policy
-        current_potential = self._get_potential(px, py)
-        if self._prev_potential is not None:
-            # Use gamma=0.999 for PBRS (matches training gamma)
-            pbrs_reward = 0.999 * current_potential - self._prev_potential
-            components["pbrs"] = pbrs_reward
-        else:
-            components["pbrs"] = 0.0
-        self._prev_potential = current_potential
-
-        # 4. STUCK DETECTION
+        # 3. STUCK DETECTION
         if abs(delta) < 0.5:
             self._steps_without_progress += 1
         else:
@@ -172,7 +144,18 @@ class RewardCalculator:
         total = sum(components.values())
         total = np.clip(total, self.cfg.reward_clip_min, self.cfg.reward_clip_max)
 
+        # Expose track state for observation builder
+        self.last_track_dist = self._cumulative_dist  # cumulative across laps
+        self.last_total_length = self._total_length    # single lap length
+
         return float(total), components, should_terminate
+
+    def get_nearest_checkpoint_index(self, px: float, py: float) -> int:
+        """Get the index of the nearest checkpoint to the player position."""
+        if self._checkpoints is None or len(self._checkpoints) < 2:
+            return 0
+        dists = np.sqrt(np.sum((self._checkpoints - np.array([px, py])) ** 2, axis=1))
+        return int(np.argmin(dists))
 
     def compute_time_bonus(self, race_time: float) -> float:
         """Compute quadratic time bonus at race completion.

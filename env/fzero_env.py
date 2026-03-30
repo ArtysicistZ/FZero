@@ -112,7 +112,10 @@ class FZeroEnv(gym.Env):
                 self._checkpoints = np.array(pts, dtype=np.float64)
 
         screen = self._frame_processor.process_frame(obs_raw)
-        float_obs = self._float_builder.build(info, self._checkpoints, action=np.zeros(5, dtype=np.int64))
+        float_obs = self._float_builder.build(
+            info, self._checkpoints, action=np.zeros(5, dtype=np.int64),
+            track_dist=0.0, total_track_length=1.0, nearest_cp_idx=0,
+        )
 
         self._last_info = info
         observation = {"screen": screen, "float": float_obs}
@@ -141,41 +144,42 @@ class FZeroEnv(gym.Env):
 
         self._step_count += 1
 
-        # Build observation
-        screen = self._frame_processor.process_frame(obs_raw)
-        float_obs = self._float_builder.build(info, self._checkpoints, action=action)
-        observation = {"screen": screen, "float": float_obs}
-
-        # Compute shaped reward
+        # Compute shaped reward FIRST (populates track state for observations)
         flat_action = multi_to_flat(action)
         reward, components, stuck = self._reward_calc.compute(info, action=flat_action)
 
+        # Get track state from reward calculator for observation builder
+        track_dist = getattr(self._reward_calc, 'last_track_dist', 0.0)
+        total_length = getattr(self._reward_calc, 'last_total_length', 1.0)
+        px = float(info.get("player_x_track", info.get("player_x", 0)))
+        py = float(info.get("player_y_track", info.get("player_y", 0)))
+        nearest_cp = self._reward_calc.get_nearest_checkpoint_index(px, py)
+
+        # Build observation with corrected track state
+        screen = self._frame_processor.process_frame(obs_raw)
+        float_obs = self._float_builder.build(
+            info, self._checkpoints, action=action,
+            track_dist=track_dist, total_track_length=total_length,
+            nearest_cp_idx=nearest_cp,
+        )
+        observation = {"screen": screen, "float": float_obs}
+
+        # Compute lap from track progress (RAM lap counter is broken — only updates at race end)
+        estimated_lap = track_dist / total_length if total_length > 0 else 0.0
+
         # Determine termination
         energy = info.get("energy", 0)
-        lap = info.get("lap", 0)
-        race_finished = lap >= 5
+        ram_lap = info.get("lap", 0)
+        race_finished = ram_lap >= 5  # RAM lap jumps to 5 at race end — this still works
         terminated = energy <= 0 or race_finished
 
-        # Time bonus — awarded at episode end based on speed
-        # Full bonus for completing 5 laps; partial bonus for dying mid-race.
-        # Partial bonus encourages boost exploration: dying fast on lap 4
-        # is rewarded more than safe slow driving without boost.
-        if terminated and lap > 0:
-            t_min = info.get("race_timer_min", 0)
-            t_sec = info.get("race_timer_sec", 0)
-            t_csec = info.get("race_timer_csec", 0)
-            elapsed = t_min * 60.0 + t_sec + t_csec / 100.0
-            laps_done = min(lap, 5)
-
-            if race_finished:
-                bonus = self._reward_calc.compute_time_bonus(elapsed)
-                info["race_time"] = elapsed
-            else:
-                projected_time = elapsed * 5.0 / laps_done
-                bonus = self._reward_calc.compute_time_bonus(projected_time) * (laps_done / 5.0)
-
+        # Time bonus — only awarded when race is actually completed
+        if race_finished:
+            elapsed = self._decode_race_time(info)
+            bonus = self._reward_calc.compute_time_bonus(elapsed)
             components["time_bonus"] = bonus
             reward += bonus
+            info["race_time"] = elapsed
 
         self._last_reward_components = components
 
@@ -190,9 +194,22 @@ class FZeroEnv(gym.Env):
         info["time_penalty_value"] = self._reward_config.time_penalty
         info["step_count"] = self._step_count
         info["action"] = flat_action
+        info["estimated_lap"] = estimated_lap
         self._last_info = info
 
         return observation, reward, terminated, truncated, info
+
+    @staticmethod
+    def _bcd_to_int(bcd_val: int) -> int:
+        """Decode a BCD-encoded byte to integer. E.g. 0x59 -> 59."""
+        return ((bcd_val >> 4) & 0xF) * 10 + (bcd_val & 0xF)
+
+    def _decode_race_time(self, info: dict) -> float:
+        """Decode BCD-encoded race timer from RAM to seconds."""
+        t_min = info.get("race_timer_min", 0)
+        t_sec = self._bcd_to_int(info.get("race_timer_sec", 0))
+        t_csec = self._bcd_to_int(info.get("race_timer_csec", 0))
+        return t_min * 60.0 + t_sec + t_csec / 100.0
 
     def render(self):
         return self._retro_env.render()

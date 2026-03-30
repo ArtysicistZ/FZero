@@ -11,6 +11,8 @@ import argparse
 import os
 import sys
 
+import numpy as np
+
 from datetime import datetime
 
 from training.config import (
@@ -117,7 +119,7 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
     # norm_reward=True: normalizes returns using running statistics
     gamma_for_norm = getattr(getattr(config, algo), "gamma", 0.999)
     env = VecNormalize(env, norm_obs=False, norm_reward=True,
-                       gamma=gamma_for_norm, clip_reward=10.0)
+                       gamma=gamma_for_norm, clip_reward=30.0)
 
     # Determine total timesteps for this algorithm
     algo_cfg = getattr(config, algo)
@@ -138,13 +140,18 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
         "features_extractor_kwargs": {"cfg": config.network},
     }
 
+    # LR schedule for PPO: linear decay from lr_start to lr_end
+    def ppo_lr_schedule(progress_remaining: float) -> float:
+        """progress_remaining goes from 1.0 to 0.0 over training."""
+        return config.ppo.lr_end + progress_remaining * (config.ppo.lr_start - config.ppo.lr_end)
+
     # Create the RL model (or load from checkpoint)
     if algo == "ppo":
         if load_path:
             print(f"Loading model from {load_path}")
             model = PPO.load(
                 load_path, env=env,
-                learning_rate=config.ppo.learning_rate,
+                learning_rate=ppo_lr_schedule,
                 gamma=config.ppo.gamma,
                 clip_range=config.ppo.clip_range,
                 ent_coef=config.ppo.ent_coef,
@@ -157,7 +164,7 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
             model = PPO(
                 "MultiInputPolicy",
                 env,
-                learning_rate=config.ppo.learning_rate,
+                learning_rate=ppo_lr_schedule,
                 n_steps=config.ppo.n_steps,
                 batch_size=config.ppo.batch_size,
                 n_epochs=config.ppo.n_epochs,

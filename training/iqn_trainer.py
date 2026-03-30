@@ -435,10 +435,10 @@ class IQNTrainer:
                     # Check for best race time
                     lap = info.get("lap", 0)
                     if lap >= 5:
-                        t_min = info.get("race_timer_min", 0)
-                        t_sec = info.get("race_timer_sec", 0)
-                        t_csec = info.get("race_timer_csec", 0)
-                        race_time = t_min * 60 + t_sec + t_csec / 100
+                        # Use BCD-decoded race_time from fzero_env
+                        race_time = info.get("race_time", None)
+                        if race_time is None:
+                            continue
                         if race_time < self._best_race_time:
                             self._best_race_time = race_time
                             save_path = str(Path(self.dirs["best"]) / "best_model.pt")
