@@ -15,4 +15,5 @@ wandb/
 models/
 videos/
 logs/
+scripts/
 *.png

@@ -59,7 +59,7 @@ class FZeroEnv(gym.Env):
         # Submodules
         self._frame_processor = FrameProcessor(self._env_config)
         self._float_builder = FloatFeatureBuilder(self._env_config)
-        self._reward_calc = RewardCalculator(self._reward_config, n_envs=self._env_config.n_envs)
+        self._reward_calc = RewardCalculator(self._reward_config)
 
         # Track checkpoint data (loaded once, used for track preview)
         self._checkpoints = None
@@ -149,11 +149,35 @@ class FZeroEnv(gym.Env):
         # Compute shaped reward
         flat_action = multi_to_flat(action)
         reward, components, stuck = self._reward_calc.compute(info, action=flat_action)
-        self._last_reward_components = components
 
         # Determine termination
         energy = info.get("energy", 0)
-        terminated = energy <= 0 or info.get("lap", 0) >= 5
+        lap = info.get("lap", 0)
+        race_finished = lap >= 5
+        terminated = energy <= 0 or race_finished
+
+        # Time bonus — awarded at episode end based on speed
+        # Full bonus for completing 5 laps; partial bonus for dying mid-race.
+        # Partial bonus encourages boost exploration: dying fast on lap 4
+        # is rewarded more than safe slow driving without boost.
+        if terminated and lap > 0:
+            t_min = info.get("race_timer_min", 0)
+            t_sec = info.get("race_timer_sec", 0)
+            t_csec = info.get("race_timer_csec", 0)
+            elapsed = t_min * 60.0 + t_sec + t_csec / 100.0
+            laps_done = min(lap, 5)
+
+            if race_finished:
+                bonus = self._reward_calc.compute_time_bonus(elapsed)
+                info["race_time"] = elapsed
+            else:
+                projected_time = elapsed * 5.0 / laps_done
+                bonus = self._reward_calc.compute_time_bonus(projected_time) * (laps_done / 5.0)
+
+            components["time_bonus"] = bonus
+            reward += bonus
+
+        self._last_reward_components = components
 
         # Determine truncation
         truncated = (
@@ -163,7 +187,7 @@ class FZeroEnv(gym.Env):
 
         # Enrich info dict for logging
         info["reward_components"] = components
-        info["time_penalty_value"] = -components.get("time", 0)
+        info["time_penalty_value"] = self._reward_config.time_penalty
         info["step_count"] = self._step_count
         info["action"] = flat_action
         self._last_info = info

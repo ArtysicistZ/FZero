@@ -22,7 +22,6 @@ def _make_info(player_x_track=2200, player_y_track=368, **overrides):
         "lap": 0,
         "checkpoint_total": 4,
         "checkpoint_facing": 0,
-        # Simple square track: 4 checkpoints forming a loop
         "cp_x_0": 1000, "cp_y_0": 0,
         "cp_x_1": 2000, "cp_y_1": 0,
         "cp_x_2": 2000, "cp_y_2": 1000,
@@ -42,6 +41,7 @@ class TestRewardCalculator:
         assert not np.isnan(reward)
         assert "progress" in components
         assert "time" in components
+        assert "pbrs" in components
 
     def test_first_step_progress_is_zero(self, calc):
         calc.reset()
@@ -52,9 +52,7 @@ class TestRewardCalculator:
 
     def test_progress_positive_on_forward_movement(self, calc):
         calc.reset()
-        # Start at x=1200 (on segment CP0→CP1, along x-axis)
         calc.compute(_make_info(player_x_track=1200, player_y_track=0))
-        # Move forward to x=1500
         _, components, _ = calc.compute(
             _make_info(player_x_track=1500, player_y_track=0)
         )
@@ -63,18 +61,17 @@ class TestRewardCalculator:
     def test_progress_negative_on_backward_movement(self, calc):
         calc.reset()
         calc.compute(_make_info(player_x_track=1500, player_y_track=0))
-        # Move backward to x=1200
         _, components, _ = calc.compute(
             _make_info(player_x_track=1200, player_y_track=0)
         )
         assert components["progress"] < 0
 
-    def test_time_penalty_is_negative(self, calc):
+    def test_time_penalty_is_fixed(self, calc):
         calc.reset()
         _, components, _ = calc.compute(
             _make_info(player_x_track=1500, player_y_track=0)
         )
-        assert components["time"] < 0
+        assert components["time"] == -RewardConfig().time_penalty
 
     def test_reward_clipped_within_bounds(self, calc):
         cfg = RewardConfig()
@@ -86,7 +83,6 @@ class TestRewardCalculator:
 
     def test_stuck_detection_after_timeout(self, calc):
         calc.reset()
-        # Stay at same position
         info = _make_info(player_x_track=1500, player_y_track=0)
         stuck = False
         for _ in range(calc._stuck_timeout + 1):
@@ -95,40 +91,41 @@ class TestRewardCalculator:
 
     def test_not_stuck_when_making_progress(self, calc):
         calc.reset()
-        # Move forward each step along CP0→CP1 segment (x-axis)
         for i in range(100):
-            x = 1000 + (i % 900)  # cycle within segment
+            x = 1000 + (i % 900)
             _, _, stuck = calc.compute(
                 _make_info(player_x_track=x, player_y_track=0)
             )
         assert stuck is False
 
-    def test_no_wall_penalty_component(self, calc):
+    def test_pbrs_present_in_components(self, calc):
         calc.reset()
         calc.compute(_make_info(player_x_track=1500, player_y_track=0))
         _, components, _ = calc.compute(
-            _make_info(player_x_track=1500, player_y_track=0)
+            _make_info(player_x_track=1600, player_y_track=0)
         )
-        assert "wall" not in components
+        assert "pbrs" in components
 
-    def test_time_penalty_increases_over_steps(self, calc):
-        """Time penalty should increase over training steps (exponential schedule)."""
-        calc.reset()
-        penalties = []
-        for i in range(100):
-            x = 1000 + (i % 900)
-            _, components, _ = calc.compute(
-                _make_info(player_x_track=x, player_y_track=0)
-            )
-            penalties.append(-components["time"])
-        # Penalty should increase from start toward end
-        assert penalties[-1] > penalties[0]
+    def test_time_bonus_positive_for_fast_race(self, calc):
+        bonus = calc.compute_time_bonus(120.0)
+        assert bonus > 0
 
-    def test_time_penalty_starts_at_configured_value(self, calc):
-        """Time penalty should start near time_penalty_start."""
-        calc.reset()
-        _, components, _ = calc.compute(
-            _make_info(player_x_track=1500, player_y_track=0)
-        )
+    def test_time_bonus_zero_for_slow_race(self, calc):
         cfg = RewardConfig()
-        assert abs(-components["time"] - cfg.time_penalty_start) < 0.01
+        bonus = calc.compute_time_bonus(cfg.time_bonus_reference + 10)
+        assert bonus == 0.0
+
+    def test_time_bonus_increases_with_speed(self, calc):
+        bonus_slow = calc.compute_time_bonus(160.0)
+        bonus_fast = calc.compute_time_bonus(120.0)
+        assert bonus_fast > bonus_slow
+
+    def test_time_bonus_quadratic(self, calc):
+        """Marginal reward should increase as race time decreases."""
+        bonus_162 = calc.compute_time_bonus(162.0)
+        bonus_161 = calc.compute_time_bonus(161.0)
+        bonus_120 = calc.compute_time_bonus(120.0)
+        bonus_119 = calc.compute_time_bonus(119.0)
+        marginal_easy = bonus_161 - bonus_162
+        marginal_hard = bonus_119 - bonus_120
+        assert marginal_hard > marginal_easy

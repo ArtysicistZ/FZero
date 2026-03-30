@@ -93,7 +93,7 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
     # Import here to avoid slow imports when just checking CLI args
     from stable_baselines3 import PPO, DQN
     from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
-    from stable_baselines3.common.vec_env import VecVideoRecorder
+    from stable_baselines3.common.vec_env import VecVideoRecorder, VecNormalize
     if algo == "qrdqn":
         from sb3_contrib import QRDQN
 
@@ -111,6 +111,13 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
         reward_config=config.reward,
         flat_actions=flat_actions,
     )
+
+    # Normalize rewards (VecNormalize) — makes value function learning easier
+    # norm_obs=False: our float features are already manually normalized
+    # norm_reward=True: normalizes returns using running statistics
+    gamma_for_norm = getattr(getattr(config, algo), "gamma", 0.999)
+    env = VecNormalize(env, norm_obs=False, norm_reward=True,
+                       gamma=gamma_for_norm, clip_reward=10.0)
 
     # Determine total timesteps for this algorithm
     algo_cfg = getattr(config, algo)

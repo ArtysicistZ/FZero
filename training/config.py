@@ -47,22 +47,34 @@ class EnvConfig:
 # ============================================================
 @dataclass
 class RewardConfig:
-    # Track-centerline progress reward.
+    # Track-centerline progress reward
     progress_scale: float = 0.01
-    # Exponential time penalty schedule: ramps from start to end over training.
-    # Fixed per step (not proportional to speed) → clear gradient for speed optimization.
-    time_penalty_start: float = 0.05        # very gentle early (break-even at 5 u/step)
-    time_penalty_end: float = 0.15          # finishing at 138s = net +349 (always better than stopping)
-    time_penalty_ramp_steps: int = 3_000_000  # reach full penalty at 3M steps
-    time_penalty_exp_k: float = 4.0         # exponential steepness
+
+    # Fixed time penalty per step (Linesight-style, no ramp)
+    # At current 162s pace (23.5 u/step): net = +0.035/step (positive, safe)
+    # At WR 118s pace (32.3 u/step): net = +0.123/step (clearly better)
+    time_penalty: float = 0.20
+
+    # Quadratic race completion bonus: ((ref - time) / ref)^2 * scale
+    # Rewards faster completion with accelerating marginal returns
+    # 162s: +50, 140s: +247, 118s: +593. 1s improvement: +5 to +19.
+    time_bonus_reference: float = 180.0    # reference "slow" time (seconds)
+    time_bonus_scale: float = 5000.0       # quadratic scale factor
+
+    # Potential-based reward shaping (PBRS) — dense cornering signal
+    # phi(s) = pbrs_scale * clamp(dist_to_checkpoint, pbrs_min_dist, pbrs_max_dist)
+    # Reward: gamma * phi(s') - phi(s). Preserves optimal policy (Andrew Ng 1999).
+    pbrs_scale: float = -0.1              # Linesight uses -0.1
+    pbrs_min_dist: float = 2.0            # clamp lower bound
+    pbrs_max_dist: float = 25.0           # clamp upper bound
+
     # Stuck penalty: applied when episode is terminated for no progress
     stuck_penalty: float = 1.0
     stuck_timeout_steps: int = 100  # ~5 sec at 20 actions/sec (frameskip=3)
-    # Removed: wall_penalty (walls self-punish via reduced progress)
-    # Removed: speed_bonus (redundant with progress — faster = more progress)
-    # Removed: lap_bonus / finish_bonus (progress already rewards completing laps)
-    reward_clip_min: float = -2.0
-    reward_clip_max: float = 2.0
+
+    # Reward clipping (applied BEFORE VecNormalize)
+    reward_clip_min: float = -10.0   # wider range to accommodate time bonus
+    reward_clip_max: float = 1000.0  # time bonus can be ~600
 
 
 # ============================================================
