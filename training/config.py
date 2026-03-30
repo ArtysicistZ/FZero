@@ -51,9 +51,9 @@ class RewardConfig:
     progress_scale: float = 0.01
     # Exponential time penalty schedule: ramps from start to end over training.
     # Fixed per step (not proportional to speed) → clear gradient for speed optimization.
-    time_penalty_start: float = 0.15        # gentle early (break-even at 15 u/step)
-    time_penalty_end: float = 0.30          # break-even at 30 u/step ≈ WR pace with frameskip=3
-    time_penalty_ramp_steps: int = 30_000_000  # ramp over ~187K per-env steps at 160 envs (frameskip=3)
+    time_penalty_start: float = 0.05        # very gentle early (break-even at 5 u/step)
+    time_penalty_end: float = 0.15          # finishing at 138s = net +349 (always better than stopping)
+    time_penalty_ramp_steps: int = 3_000_000  # reach full penalty at 3M steps
     time_penalty_exp_k: float = 4.0         # exponential steepness
     # Stuck penalty: applied when episode is terminated for no progress
     stuck_penalty: float = 1.0
@@ -95,10 +95,10 @@ class PPOConfig:
     learning_rate: float = 3e-4
     n_steps: int = 512
     # batch_size should scale with n_envs: ~n_envs × n_steps / 20
-    # With 80 envs: 2048. With 160 envs: 4096.
-    batch_size: int = 4096
+    # With 80 envs: 2048 → 80 gradient steps per rollout.
+    batch_size: int = 2048
     n_epochs: int = 4
-    gamma: float = 0.999             # long horizon for racing (~1000 step horizon)
+    gamma: float = 0.995             # horizon ~200 steps = 10 sec (sharper speed signal)
     gae_lambda: float = 0.95
     clip_range: float = 0.2
     ent_coef: float = 0.01
@@ -190,9 +190,9 @@ class IQNConfig:
 class TrainingConfig:
     use_wandb: bool = True
     wandb_project: str = "fzero-rl"
-    video_record_freq: int = 200_000  # steps between video recordings (~50 videos per 10M steps)
-    eval_freq: int = 10_000
-    save_freq: int = 50_000
+    video_record_freq: int = 5_000_000  # video every 5M steps (~10 per 50M run)
+    eval_freq: int = 50_000
+    save_freq: int = 25              # checkpoint every 25 rollouts (~1M timesteps with 80 envs)
     log_interval: int = 1
 
     env: EnvConfig = field(default_factory=EnvConfig)

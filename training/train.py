@@ -72,13 +72,14 @@ def _setup_run_dir(algo: str, config: TrainingConfig):
     return run_name, dirs
 
 
-def train(algo: str = "ppo", config: TrainingConfig = None):
+def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = None):
     """
     Train an RL agent on F-Zero.
 
     Args:
-        algo: "ppo", "dqn", or "qrdqn"
+        algo: "ppo", "dqn", "qrdqn", or "iqn"
         config: Training configuration (uses defaults if None)
+        load_path: path to a saved model to resume training from
 
     Returns:
         Path to the saved model
@@ -130,25 +131,39 @@ def train(algo: str = "ppo", config: TrainingConfig = None):
         "features_extractor_kwargs": {"cfg": config.network},
     }
 
-    # Create the RL model
+    # Create the RL model (or load from checkpoint)
     if algo == "ppo":
-        model = PPO(
-            "MultiInputPolicy",
-            env,
-            learning_rate=config.ppo.learning_rate,
-            n_steps=config.ppo.n_steps,
-            batch_size=config.ppo.batch_size,
-            n_epochs=config.ppo.n_epochs,
-            gamma=config.ppo.gamma,
-            gae_lambda=config.ppo.gae_lambda,
-            clip_range=config.ppo.clip_range,
-            ent_coef=config.ppo.ent_coef,
-            vf_coef=config.ppo.vf_coef,
-            max_grad_norm=config.ppo.max_grad_norm,
-            policy_kwargs=policy_kwargs,
-            verbose=1,
-            tensorboard_log=str(dirs["logs"]),
-        )
+        if load_path:
+            print(f"Loading model from {load_path}")
+            model = PPO.load(
+                load_path, env=env,
+                learning_rate=config.ppo.learning_rate,
+                gamma=config.ppo.gamma,
+                clip_range=config.ppo.clip_range,
+                ent_coef=config.ppo.ent_coef,
+                n_steps=config.ppo.n_steps,
+                batch_size=config.ppo.batch_size,
+                n_epochs=config.ppo.n_epochs,
+                tensorboard_log=str(dirs["logs"]),
+            )
+        else:
+            model = PPO(
+                "MultiInputPolicy",
+                env,
+                learning_rate=config.ppo.learning_rate,
+                n_steps=config.ppo.n_steps,
+                batch_size=config.ppo.batch_size,
+                n_epochs=config.ppo.n_epochs,
+                gamma=config.ppo.gamma,
+                gae_lambda=config.ppo.gae_lambda,
+                clip_range=config.ppo.clip_range,
+                ent_coef=config.ppo.ent_coef,
+                vf_coef=config.ppo.vf_coef,
+                max_grad_norm=config.ppo.max_grad_norm,
+                policy_kwargs=policy_kwargs,
+                verbose=1,
+                tensorboard_log=str(dirs["logs"]),
+            )
     elif algo == "dqn":
         model = DQN(
             "MultiInputPolicy",
@@ -300,6 +315,8 @@ def main():
                         help="Number of parallel environments (overrides config)")
     parser.add_argument("--no-wandb", action="store_true",
                         help="Disable W&B logging")
+    parser.add_argument("--load", type=str, default=None,
+                        help="Path to saved model to resume training from")
     args = parser.parse_args()
 
     config = TrainingConfig()
@@ -310,7 +327,7 @@ def main():
     if args.no_wandb:
         config.use_wandb = False
 
-    train(algo=args.algo, config=config)
+    train(algo=args.algo, config=config, load_path=args.load)
 
 
 if __name__ == "__main__":

@@ -36,19 +36,9 @@ class RewardLoggingCallback(BaseCallback):
 
             # Check if episode ended (SB3 wraps with Monitor, sets "episode" key)
             if "episode" in info:
-                log_data = {}
                 for key, val in self._episode_reward_sums[i].items():
                     self.logger.record(key, val)
-                    log_data[key] = val
-
-                # Also log directly to W&B if available (sync_tensorboard can lag)
-                try:
-                    import wandb
-                    if wandb.run is not None:
-                        wandb.log(log_data, commit=False)
-                except ImportError:
-                    pass
-
+                # SB3 logger handles aggregation; W&B syncs via sync_tensorboard
                 self._episode_reward_sums[i] = {}
 
         return True
