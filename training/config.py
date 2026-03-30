@@ -47,27 +47,20 @@ class EnvConfig:
 # ============================================================
 @dataclass
 class RewardConfig:
-    # Track-centerline progress reward
-    progress_scale: float = 0.01
-
-    # Fixed time penalty per step (Linesight-style, no ramp)
-    # At current 162s pace (23.5 u/step): net = +0.035/step (positive, safe)
-    # At WR 118s pace (32.3 u/step): net = +0.123/step (clearly better)
-    time_penalty: float = 0.20
-
-    # Quadratic race completion bonus: ((ref - time) / ref)^2 * scale
-    # Rewards faster completion with accelerating marginal returns
-    # 162s: +50, 140s: +247, 118s: +593. 1s improvement: +5 to +19.
-    time_bonus_reference: float = 180.0    # reference "slow" time (seconds)
-    time_bonus_scale: float = 5000.0       # quadratic bonus at race completion
+    # r = linear_weight * (delta/ref) + quadratic_weight * (delta/ref)^2
+    # delta = track progress per step (= speed_along_track * dt)
+    # ref = average delta at 135s pace
+    #
+    # Linear term: constant gradient at all speeds (cold start works)
+    # Quadratic term: increasing gradient at high speed (breaks plateau)
+    # No constant term (constants cancel in PPO advantages)
+    speed_ref: float = 26.6            # avg delta at 135s = 5*14389/(135*20)
+    linear_weight: float = 1.0        # weight for d/ref term
+    quadratic_weight: float = 0.5     # weight for (d/ref)^2 term
 
     # Stuck penalty: applied when episode is terminated for no progress
     stuck_penalty: float = 1.0
     stuck_timeout_steps: int = 100  # ~5 sec at 20 actions/sec (frameskip=3)
-
-    # Reward clipping (applied BEFORE VecNormalize)
-    reward_clip_min: float = -10.0   # wider range to accommodate time bonus
-    reward_clip_max: float = 1000.0  # time bonus can be ~600
 
 
 # ============================================================
@@ -97,18 +90,16 @@ class NetworkConfig:
 # ============================================================
 @dataclass
 class PPOConfig:
-    # LR decays linearly from lr_start to lr_end over training
-    lr_start: float = 1.5e-4           # fine-tuning LR (targets KL ~0.015)
-    lr_end: float = 1e-5              # Linesight-style end LR
+    learning_rate: float = 3e-4        # constant LR, standard for racing PPO
     n_steps: int = 512
     # batch_size should scale with n_envs: ~n_envs × n_steps / 20
     # With 80 envs: 2048 → 80 gradient steps per rollout.
     batch_size: int = 2048
     n_epochs: int = 4
-    gamma: float = 0.999             # long horizon for racing
+    gamma: float = 0.99              # 5s horizon — enough for corners, standard in racing RL
     gae_lambda: float = 0.95
     clip_range: float = 0.2
-    ent_coef: float = 0.02           # increased for shoulder lean exploration
+    ent_coef: float = 0.01           # standard for racing (DeepRacer best, good exploration from scratch)
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
     total_timesteps: int = 50_000_000   # ~10h at 1400 fps with 160 envs

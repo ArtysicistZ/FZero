@@ -1,7 +1,7 @@
 """
 Custom SB3 callbacks for F-Zero RL training.
 
-  - RewardLoggingCallback: logs per-component reward breakdown
+  - RewardLoggingCallback: logs per-component reward breakdown + speed metrics
   - BestLapCallback: saves model when best lap time improves
 """
 import os
@@ -10,50 +10,76 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 class RewardLoggingCallback(BaseCallback):
     """
-    Logs individual reward components to TensorBoard/W&B after each episode.
-    Components: progress, speed, wall, time, lap, finish, stuck.
+    Logs speed metrics and stuck events to TensorBoard/W&B.
+
+    Metrics:
+      - speed/avg_delta: average track progress per step
+      - speed/max_delta: peak speed in episode
+      - episode/length: episode length in steps
+      - reward/stuck: stuck penalty (only when triggered)
+      - race/time: every race completion time
+      - race/best_time: best race time so far
     """
 
     def __init__(self, verbose: int = 0):
         super().__init__(verbose)
-        self._episode_reward_sums = {}  # {env_idx: {key: sum}}
-        self._episode_norm_reward_sums = {}  # {env_idx: float}
+        self._episode_reward_sums = {}   # {env_idx: {key: sum}}
+        self._episode_deltas = {}        # {env_idx: [delta, ...]}
+        self._episode_steps = {}         # {env_idx: int}
+        self._best_race_time = float("inf")
 
     def _on_step(self) -> bool:
-        # self.locals["rewards"] contains the NORMALIZED rewards PPO trains on
-        norm_rewards = self.locals.get("rewards", [])
-
         for i, info in enumerate(self.locals.get("infos", [])):
             if i not in self._episode_reward_sums:
                 self._episode_reward_sums[i] = {}
-                self._episode_norm_reward_sums[i] = 0.0
+                self._episode_deltas[i] = []
+                self._episode_steps[i] = 0
 
-            # Accumulate raw reward components
+            self._episode_steps[i] += 1
+
+            # Track deltas and stuck count
             components = info.get("reward_components", {})
-            for key, val in components.items():
-                full_key = f"reward/{key}"
-                self._episode_reward_sums[i][full_key] = (
-                    self._episode_reward_sums[i].get(full_key, 0.0) + val
+            if "delta" in components:
+                self._episode_deltas[i].append(components["delta"])
+            if components.get("stuck", 0) != 0:
+                self._episode_reward_sums[i]["reward/stuck"] = (
+                    self._episode_reward_sums[i].get("reward/stuck", 0.0) + components["stuck"]
                 )
-
-            # Track latest time_penalty_value (snapshot, not sum)
-            if "time_penalty_value" in info:
-                self._episode_reward_sums[i]["reward/time_penalty_value"] = info["time_penalty_value"]
-
-            # Accumulate normalized reward (what PPO actually trains on)
-            if i < len(norm_rewards):
-                self._episode_norm_reward_sums[i] += float(norm_rewards[i])
 
             # Check if episode ended
             if "episode" in info:
-                # Log raw components
+                # Log stuck penalty if any
                 for key, val in self._episode_reward_sums[i].items():
                     self.logger.record(key, val)
-                # Log normalized episode return (what PPO actually sees)
-                self.logger.record("reward/norm_episode_return",
-                                   self._episode_norm_reward_sums[i])
+
+                # Log speed metrics from deltas
+                deltas = self._episode_deltas[i]
+                if deltas:
+                    import numpy as np
+                    deltas_arr = np.array(deltas)
+                    self.logger.record("speed/avg_delta", np.mean(deltas_arr))
+                    self.logger.record("speed/max_delta", np.max(deltas_arr))
+                    self.logger.record("episode/length", self._episode_steps[i])
+
+                # Log every race completion time + best
+                race_time = info.get("race_time", None)
+                if race_time is not None:
+                    self.logger.record("race/time", race_time)
+                    if race_time < self._best_race_time:
+                        self._best_race_time = race_time
+                    self.logger.record("race/best_time", self._best_race_time)
+                    try:
+                        import wandb
+                        if wandb.run is not None:
+                            wandb.log({"race/time": race_time,
+                                       "race/best_time": self._best_race_time}, commit=False)
+                    except ImportError:
+                        pass
+
+                # Reset
                 self._episode_reward_sums[i] = {}
-                self._episode_norm_reward_sums[i] = 0.0
+                self._episode_deltas[i] = []
+                self._episode_steps[i] = 0
 
         return True
 
@@ -71,22 +97,12 @@ class BestLapCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         for info in self.locals.get("infos", []):
-            # race_time is set by fzero_env when race finishes (already BCD-decoded)
             race_time = info.get("race_time", None)
             if race_time is not None:
                 if race_time < self._best_race_time:
                     self._best_race_time = race_time
                     save_path = os.path.join(self._save_dir, "best_model")
                     self.model.save(save_path)
-                    self.logger.record("best/race_time", race_time)
-
-                    try:
-                        import wandb
-                        if wandb.run is not None:
-                            wandb.log({"best/race_time": race_time}, commit=False)
-                    except ImportError:
-                        pass
-
                     if self.verbose > 0:
                         print(f"New best race time: {race_time:.2f}s -> saved to {save_path}")
 

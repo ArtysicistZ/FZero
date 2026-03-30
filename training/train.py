@@ -62,10 +62,8 @@ def _setup_run_dir(algo: str, config: TrainingConfig):
 
     dirs = {
         "run": run_dir,
-        "checkpoints": run_dir / "checkpoints",
         "best": run_dir / "best",
         "final": run_dir / "final",
-        "videos": run_dir / "videos",
         "logs": run_dir / "logs",
     }
     for d in dirs.values():
@@ -94,8 +92,8 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
 
     # Import here to avoid slow imports when just checking CLI args
     from stable_baselines3 import PPO, DQN
-    from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
-    from stable_baselines3.common.vec_env import VecVideoRecorder, VecNormalize
+    from stable_baselines3.common.callbacks import CallbackList
+    from stable_baselines3.common.vec_env import VecNormalize
     if algo == "qrdqn":
         from sb3_contrib import QRDQN
 
@@ -114,25 +112,17 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
         flat_actions=flat_actions,
     )
 
-    # Normalize rewards (VecNormalize) — makes value function learning easier
-    # norm_obs=False: our float features are already manually normalized
-    # norm_reward=True: normalizes returns using running statistics
-    gamma_for_norm = getattr(getattr(config, algo), "gamma", 0.999)
-    env = VecNormalize(env, norm_obs=False, norm_reward=True,
-                       gamma=gamma_for_norm, clip_reward=30.0)
+    # VecNormalize: norm_obs=False (float features manually normalized)
+    # norm_reward=False: reward shape matters for PPO advantages,
+    # and VecNormalize equalizes all shapes (proven: gradient ~ 1/std(speed)
+    # independent of reward function). Raw rewards preserve designed gradient.
+    env = VecNormalize(env, norm_obs=False, norm_reward=False)
 
     # Determine total timesteps for this algorithm
     algo_cfg = getattr(config, algo)
     total_timesteps = algo_cfg.total_timesteps
 
-    # Wrap with video recorder (skip if freq is very high — effectively disabled)
-    if config.video_record_freq < total_timesteps:
-        env = VecVideoRecorder(
-            env,
-            video_folder=str(dirs["videos"]),
-            record_video_trigger=lambda step: step % config.video_record_freq == 0,
-            video_length=2000,  # ~2 min of gameplay at 15fps
-        )
+    # Video recording disabled to save disk space
 
     # Policy kwargs: use our custom feature extractor
     policy_kwargs = {
@@ -140,18 +130,13 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
         "features_extractor_kwargs": {"cfg": config.network},
     }
 
-    # LR schedule for PPO: linear decay from lr_start to lr_end
-    def ppo_lr_schedule(progress_remaining: float) -> float:
-        """progress_remaining goes from 1.0 to 0.0 over training."""
-        return config.ppo.lr_end + progress_remaining * (config.ppo.lr_start - config.ppo.lr_end)
-
     # Create the RL model (or load from checkpoint)
     if algo == "ppo":
         if load_path:
             print(f"Loading model from {load_path}")
             model = PPO.load(
                 load_path, env=env,
-                learning_rate=ppo_lr_schedule,
+                learning_rate=config.ppo.learning_rate,
                 gamma=config.ppo.gamma,
                 clip_range=config.ppo.clip_range,
                 ent_coef=config.ppo.ent_coef,
@@ -164,7 +149,7 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
             model = PPO(
                 "MultiInputPolicy",
                 env,
-                learning_rate=ppo_lr_schedule,
+                learning_rate=config.ppo.learning_rate,
                 n_steps=config.ppo.n_steps,
                 batch_size=config.ppo.batch_size,
                 n_epochs=config.ppo.n_epochs,
@@ -268,8 +253,6 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
             )
             wandb_callback = WandbCallback(
                 verbose=1,
-                model_save_path=str(dirs["checkpoints"]),
-                model_save_freq=config.save_freq,
             )
         except ImportError:
             print("WARNING: wandb not installed, skipping W&B logging.")
@@ -277,15 +260,10 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
     else:
         wandb_callback = None
 
-    # Assemble callbacks
+    # Assemble callbacks (no CheckpointCallback — only save best model to avoid disk bloat)
     callbacks = [
         RewardLoggingCallback(verbose=1),
         BestLapCallback(save_dir=str(dirs["best"]), verbose=1),
-        CheckpointCallback(
-            save_freq=config.save_freq,
-            save_path=str(dirs["checkpoints"]),
-            name_prefix=f"fzero_{algo}",
-        ),
     ]
     if wandb_callback:
         callbacks.append(wandb_callback)

@@ -52,7 +52,7 @@ class FZeroEnv(gym.Env):
 
         # Load save state data for manual restore on reset
         import gzip
-        state_file = INTEGRATION_DIR / "FZero-Snes" / "MuteCity1.state"
+        state_file = INTEGRATION_DIR / "FZero-Snes" / "MuteCity1_FireStingray.state"
         with gzip.open(str(state_file.resolve()), "rb") as f:
             self._initial_state_data = f.read()
 
@@ -170,16 +170,18 @@ class FZeroEnv(gym.Env):
         # Determine termination
         energy = info.get("energy", 0)
         ram_lap = info.get("lap", 0)
-        race_finished = ram_lap >= 5  # RAM lap jumps to 5 at race end — this still works
-        terminated = energy <= 0 or race_finished
+        race_finished = ram_lap >= 5  # RAM lap jumps to 5 at race end
 
-        # Time bonus — only awarded when race is actually completed
+        # Also detect race completion from track progress (backup for RAM lap issues)
+        if not race_finished and estimated_lap >= 5.0:
+            race_finished = True
+
+        # Log race time when finished
         if race_finished:
             elapsed = self._decode_race_time(info)
-            bonus = self._reward_calc.compute_time_bonus(elapsed)
-            components["time_bonus"] = bonus
-            reward += bonus
             info["race_time"] = elapsed
+
+        terminated = energy <= 0 or race_finished
 
         self._last_reward_components = components
 
@@ -191,7 +193,6 @@ class FZeroEnv(gym.Env):
 
         # Enrich info dict for logging
         info["reward_components"] = components
-        info["time_penalty_value"] = self._reward_config.time_penalty
         info["step_count"] = self._step_count
         info["action"] = flat_action
         info["estimated_lap"] = estimated_lap

@@ -1,13 +1,17 @@
 """
 Reward function for F-Zero RL agent.
 
-Three reward components:
-  1. Progress: distance advanced along track centerline (per step)
-  2. Time penalty: fixed cost per step (drives speed optimization)
-  3. PBRS: potential-based reward shaping for cornering (Andrew Ng 1999)
-  4. Time bonus: quadratic bonus at race completion (strong speed signal)
+Reward: r = delta/ref + 0.5 * (delta/ref)^2
 
-Uses checkpoint coordinates from RAM to define the track path.
+Delta = dot(movement, track_tangent) — the component of the car's movement
+in the track-forward direction. This is stable regardless of lateral position
+(track width) because it doesn't search for the nearest segment each step.
+
+Why tangent projection is correct for racing:
+  - A car taking a wide fast line at 30 u/step gets delta ≈ 28 (slight angle)
+  - A car taking a tight slow line at 20 u/step gets delta ≈ 19
+  - Wide fast turn gets MORE reward (28 > 19), correctly incentivizing speed
+  - The slight underestimate on curves (~5-10%) doesn't change which line is faster
 """
 import math
 
@@ -23,20 +27,27 @@ class RewardCalculator:
         self.cfg = cfg
         self._stuck_timeout = cfg.stuck_timeout_steps
         self._steps_without_progress = 0
-        self._prev_track_dist = None
-        self._cumulative_dist = 0.0  # total distance covered (across laps)
-        self._checkpoints = None   # (N, 2) array, loaded on first compute
-        self._cum_dist = None      # (N,) cumulative distance along track
+        self._prev_px = None
+        self._prev_py = None
+        self._cur_seg_idx = -1         # -1 = not initialized
+        self._seg_progress = 0.0       # progress within current segment [0, seg_len)
+        self._cumulative_dist = 0.0    # total distance covered (across laps)
+        self._checkpoints = None       # (N, 2) array
+        self._seg_lengths = None       # (N,) length of each segment
+        self._seg_tangents = None      # (N, 2) unit tangent of each segment
         self._total_length = 0.0
 
     def reset(self):
         """Reset internal state for a new episode."""
         self._steps_without_progress = 0
-        self._prev_track_dist = None
+        self._prev_px = None
+        self._prev_py = None
+        self._cur_seg_idx = -1
+        self._seg_progress = 0.0
         self._cumulative_dist = 0.0
 
     def _load_checkpoints(self, info: dict):
-        """Load checkpoint coordinates from RAM info on first call."""
+        """Load checkpoint coordinates and precompute segment geometry."""
         n_cp = int(info.get("checkpoint_total", 0))
         if n_cp == 0:
             return
@@ -48,28 +59,33 @@ class RewardCalculator:
             points.append((cx, cy))
 
         self._checkpoints = np.array(points, dtype=np.float64)
-
-        # Compute cumulative distance along checkpoint path (closed loop)
-        diffs = np.diff(self._checkpoints, axis=0)
-        seg_lengths = np.sqrt(np.sum(diffs ** 2, axis=1))
-        close_diff = self._checkpoints[0] - self._checkpoints[-1]
-        close_len = np.sqrt(np.sum(close_diff ** 2))
-        self._cum_dist = np.concatenate([[0.0], np.cumsum(seg_lengths)])
-        self._total_length = self._cum_dist[-1] + close_len
-
-    def _get_track_distance(self, px: float, py: float) -> float:
-        """Project player onto track centerline. Returns distance along track."""
-        if self._checkpoints is None or len(self._checkpoints) < 2:
-            return 0.0
-
         n = len(self._checkpoints)
-        best_track_dist = 0.0
-        best_perp_dist_sq = float("inf")
+
+        # Precompute segment lengths and unit tangent vectors
+        self._seg_lengths = np.zeros(n)
+        self._seg_tangents = np.zeros((n, 2))
+        for i in range(n):
+            j = (i + 1) % n
+            dx = self._checkpoints[j, 0] - self._checkpoints[i, 0]
+            dy = self._checkpoints[j, 1] - self._checkpoints[i, 1]
+            seg_len = math.sqrt(dx * dx + dy * dy)
+            self._seg_lengths[i] = seg_len
+            if seg_len > 1e-6:
+                self._seg_tangents[i] = (dx / seg_len, dy / seg_len)
+
+        self._total_length = float(np.sum(self._seg_lengths))
+
+    def _init_position(self, px: float, py: float):
+        """Global search to find starting segment and position within it."""
+        n = len(self._checkpoints)
+        best_perp_sq = float("inf")
+        best_seg = 0
+        best_t = 0.0
 
         for i in range(n):
-            next_i = (i + 1) % n
+            j = (i + 1) % n
             ax, ay = self._checkpoints[i]
-            bx, by = self._checkpoints[next_i]
+            bx, by = self._checkpoints[j]
             dx, dy = bx - ax, by - ay
             seg_len_sq = dx * dx + dy * dy
             if seg_len_sq < 1e-6:
@@ -80,19 +96,19 @@ class RewardCalculator:
 
             proj_x = ax + t * dx
             proj_y = ay + t * dy
-            perp_dist_sq = (px - proj_x) ** 2 + (py - proj_y) ** 2
+            perp_sq = (px - proj_x) ** 2 + (py - proj_y) ** 2
 
-            if perp_dist_sq < best_perp_dist_sq:
-                best_perp_dist_sq = perp_dist_sq
-                seg_len = math.sqrt(seg_len_sq)
-                cum_at_i = self._cum_dist[i] if i < len(self._cum_dist) else self._cum_dist[-1]
-                best_track_dist = cum_at_i + t * seg_len
+            if perp_sq < best_perp_sq:
+                best_perp_sq = perp_sq
+                best_seg = i
+                best_t = t
 
-        return best_track_dist
+        self._cur_seg_idx = best_seg
+        self._seg_progress = best_t * self._seg_lengths[best_seg]
 
     def compute(self, info: dict, action: int = 0) -> tuple[float, dict, bool]:
         """
-        Compute reward.
+        Compute reward: r = delta/ref + 0.5 * (delta/ref)^2
 
         Returns:
             (total_reward, component_dict, should_terminate_early)
@@ -103,29 +119,57 @@ class RewardCalculator:
         px = float(info.get("player_x_track", info.get("player_x", 0)))
         py = float(info.get("player_y_track", info.get("player_y", 0)))
 
-        components = {}
-
-        # 1. TRACK PROGRESS
-        track_dist = self._get_track_distance(px, py)
-
-        if self._prev_track_dist is None:
+        if self._cur_seg_idx == -1:
+            # First call: initialize position via global search
+            self._init_position(px, py)
+            self._prev_px = px
+            self._prev_py = py
             delta = 0.0
         else:
-            delta = track_dist - self._prev_track_dist
-            if delta < -self._total_length / 2:
-                delta += self._total_length
-            elif delta > self._total_length / 2:
-                delta -= self._total_length
+            # Project movement onto current segment's tangent direction
+            move_x = px - self._prev_px
+            move_y = py - self._prev_py
+            tx, ty = self._seg_tangents[self._cur_seg_idx]
+            delta = move_x * tx + move_y * ty
 
-        components["progress"] = delta * self.cfg.progress_scale
+            # Advance segment tracking
+            self._seg_progress += delta
+            n = len(self._checkpoints)
+
+            # Forward: crossed into next segment(s)
+            while self._seg_progress >= self._seg_lengths[self._cur_seg_idx]:
+                self._seg_progress -= self._seg_lengths[self._cur_seg_idx]
+                self._cur_seg_idx = (self._cur_seg_idx + 1) % n
+
+            # Backward: crossed into previous segment(s)
+            while self._seg_progress < 0:
+                self._cur_seg_idx = (self._cur_seg_idx - 1) % n
+                self._seg_progress += self._seg_lengths[self._cur_seg_idx]
+
+            self._prev_px = px
+            self._prev_py = py
 
         # Accumulate total distance (across laps)
         self._cumulative_dist += max(0.0, delta)
 
-        # 2. FIXED TIME PENALTY
-        components["time"] = -self.cfg.time_penalty
+        # Compute reward: linear + quadratic in normalized delta
+        ref = self.cfg.speed_ref
+        d_norm = delta / ref
+        linear = self.cfg.linear_weight * d_norm
+        quadratic = self.cfg.quadratic_weight * d_norm * d_norm
 
-        # 3. STUCK DETECTION
+        # For negative delta, quadratic would reward going backward.
+        # Use signed quadratic to preserve the penalty.
+        if delta < 0:
+            quadratic = -self.cfg.quadratic_weight * d_norm * d_norm
+
+        components = {
+            "linear": linear,
+            "quadratic": quadratic,
+            "delta": delta,
+        }
+
+        # Stuck detection
         if abs(delta) < 0.5:
             self._steps_without_progress += 1
         else:
@@ -138,15 +182,11 @@ class RewardCalculator:
         else:
             components["stuck"] = 0.0
 
-        # Update state
-        self._prev_track_dist = track_dist
-
-        total = sum(components.values())
-        total = np.clip(total, self.cfg.reward_clip_min, self.cfg.reward_clip_max)
+        total = linear + quadratic + components["stuck"]
 
         # Expose track state for observation builder
-        self.last_track_dist = self._cumulative_dist  # cumulative across laps
-        self.last_total_length = self._total_length    # single lap length
+        self.last_track_dist = self._cumulative_dist
+        self.last_total_length = self._total_length
 
         return float(total), components, should_terminate
 
@@ -156,14 +196,3 @@ class RewardCalculator:
             return 0
         dists = np.sqrt(np.sum((self._checkpoints - np.array([px, py])) ** 2, axis=1))
         return int(np.argmin(dists))
-
-    def compute_time_bonus(self, race_time: float) -> float:
-        """Compute quadratic time bonus at race completion.
-
-        Called by the environment when lap >= 5.
-        Returns bonus reward: ((ref - time) / ref)^2 * scale
-        """
-        ref = self.cfg.time_bonus_reference
-        if race_time >= ref:
-            return 0.0
-        return ((ref - race_time) / ref) ** 2 * self.cfg.time_bonus_scale
