@@ -99,7 +99,7 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
 
     from env import make_fzero_env
     from network import FZeroFeatureExtractor
-    from training.callbacks import RewardLoggingCallback, BestLapCallback
+    from training.callbacks import RewardLoggingCallback, BestLapCallback, AdaptiveLRCallback
 
     # Create vectorized environment
     # DQN and QR-DQN require Discrete action space (flat_actions=True)
@@ -112,11 +112,9 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
         flat_actions=flat_actions,
     )
 
-    # VecNormalize: norm_obs=False (float features manually normalized)
-    # norm_reward=False: reward shape matters for PPO advantages,
-    # and VecNormalize equalizes all shapes (proven: gradient ~ 1/std(speed)
-    # independent of reward function). Raw rewards preserve designed gradient.
-    env = VecNormalize(env, norm_obs=False, norm_reward=False)
+    gamma_for_norm = getattr(getattr(config, algo), "gamma", 0.99)
+    env = VecNormalize(env, norm_obs=False, norm_reward=True,
+                       gamma=gamma_for_norm, clip_reward=100.0)
 
     # Determine total timesteps for this algorithm
     algo_cfg = getattr(config, algo)
@@ -260,10 +258,11 @@ def train(algo: str = "ppo", config: TrainingConfig = None, load_path: str = Non
     else:
         wandb_callback = None
 
-    # Assemble callbacks (no CheckpointCallback — only save best model to avoid disk bloat)
+    # Assemble callbacks
     callbacks = [
         RewardLoggingCallback(verbose=1),
         BestLapCallback(save_dir=str(dirs["best"]), verbose=1),
+        AdaptiveLRCallback(target_kl=config.ppo.target_kl, verbose=1),
     ]
     if wandb_callback:
         callbacks.append(wandb_callback)

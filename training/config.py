@@ -54,7 +54,7 @@ class RewardConfig:
     # Linear term: constant gradient at all speeds (cold start works)
     # Quadratic term: increasing gradient at high speed (breaks plateau)
     # No constant term (constants cancel in PPO advantages)
-    speed_ref: float = 26.6            # avg delta at 135s = 5*14389/(135*20)
+    speed_ref: float = 27.3            # avg delta at 135s = 5*14724/(135*20)
     linear_weight: float = 1.0        # weight for d/ref term
     quadratic_weight: float = 0.5     # weight for (d/ref)^2 term
 
@@ -100,6 +100,7 @@ class PPOConfig:
     gae_lambda: float = 0.95
     clip_range: float = 0.2
     ent_coef: float = 0.01           # standard for racing (DeepRacer best, good exploration from scratch)
+    target_kl: float = 0.015         # adaptive LR target: increase LR when KL < target, decrease when KL > target
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
     total_timesteps: int = 50_000_000   # ~10h at 1400 fps with 160 envs
